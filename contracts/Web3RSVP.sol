@@ -1,8 +1,9 @@
-//SPDX-License-Identifier: Unlicense
-pragma solidity ^0.8.0;
+//SPDX-License-Identifier: MIT
+pragma solidity ^0.8.4;
 
 contract Web3RSVP {
-event NewEventCreated(
+
+    event NewEventCreated(
     bytes32 eventID,
     address creatorAddress,
     uint256 eventTimestamp,
@@ -18,20 +19,21 @@ event ConfirmedAttendee(bytes32 eventID, address attendeeAddress);
 event DepositsPaidOut(bytes32 eventID);
 
 
-   struct CreateEvent {
-       bytes32 eventId;
-       string eventDataCID;
-       address eventOwner;
-       uint256 eventTimestamp;
-       uint256 deposit;
-       uint256 maxCapacity;
-       address[] confirmedRSVPs;
-       address[] claimedRSVPs;
-       bool paidOut;
+    struct CreateEvent {
+        bytes32 eventId;
+        string eventDataCID;
+        address eventOwner;
+        uint256 eventTimestamp;
+        uint256 deposit;
+        uint256 maxCapacity;
+        address[] confirmedRSVPs;
+        address[] claimedRSVPs;
+        bool paidOut;
    }
 
-    mapping(bytes32 => CreateEvent) public idToEvent;
-    function createNewEvent(
+  mapping(bytes32 => CreateEvent) public idToEvent;
+
+  function createNewEvent(
     uint256 eventTimestamp,
     uint256 deposit,
     uint256 maxCapacity,
@@ -47,37 +49,35 @@ event DepositsPaidOut(bytes32 eventID);
             maxCapacity
         )
     );
+    // make sure this id isn't already claimed
+require(idToEvent[eventId].eventTimestamp == 0, "ALREADY REGISTERED");
 
     address[] memory confirmedRSVPs;
     address[] memory claimedRSVPs;
 
-
-    // this creates a new CreateEvent struct and adds it to the idToEvent mapping
+     // this creates a new CreateEvent struct and adds it to the idToEvent mapping
     idToEvent[eventId] = CreateEvent(
+        eventId,
+        eventDataCID,
+        msg.sender,
+        eventTimestamp,
+        deposit,
+        maxCapacity,
+        confirmedRSVPs,
+        claimedRSVPs,
+        false
+    );
 
-idToEvent[eventId] = CreateEvent(
-            eventId,
-            eventDataCID,
-            msg.sender,
-            eventTimestamp,
-            deposit,
-            maxCapacity,
-            confirmedRSVPs,
-            claimedRSVPs,
-            false
-        );
- emit NewEventCreated(
-            eventId,
-            msg.sender,
-            eventTimestamp,
-            maxCapacity,
-            deposit,
-            eventDataCID
-        );
-    }
-
-
-        function createNewRSVP(bytes32 eventId) external payable {
+    emit NewEventCreated(
+    eventId,
+    msg.sender,
+    eventTimestamp,
+    maxCapacity,
+    deposit,
+    eventDataCID
+);
+}
+function createNewRSVP(bytes32 eventId) external payable {
     // look up event from our mapping
     CreateEvent storage myEvent = idToEvent[eventId];
 
@@ -100,25 +100,39 @@ idToEvent[eventId] = CreateEvent(
 
     myEvent.confirmedRSVPs.push(payable(msg.sender));
 
-emit NewRSVP(eventId, msg.sender);
+    emit NewRSVP(eventId, msg.sender);
+
 }
 
-
-        function confirmAttendee(bytes32 eventId, address attendee) public {
+ function confirmAllAttendees(bytes32 eventId) public {
     // look up event from our struct using the eventId
-    CreateEvent storage myEvent = idToEvent[eventId];
+    CreateEvent memory myEvent = idToEvent[eventId];
 
     // require that msg.sender is the owner of the event - only the host should be able to check people in
     require(msg.sender == myEvent.eventOwner, "NOT AUTHORIZED");
 
     // require that attendee trying to check in actually RSVP'd
+   for (uint8 i = 0; i < myEvent.confirmedRSVPs.length; i++) {
+    confirmAttendee(eventId, myEvent.confirmedRSVPs[i]);
+  }
+
+}
+
+function confirmAttendee(bytes32 eventId, address attendee) public {
+    // look up event from our struct with the eventId
+    CreateEvent storage myEvent = idToEvent[eventId];
+
+    // make sure you require that msg.sender is the owner of the event
+    require(msg.sender == myEvent.eventOwner, "NOT AUTHORIZED");
+
+    // confirm each attendee in the rsvp array
     address rsvpConfirm;
 
-    for (uint8 i = 0; i < myEvent.confirmedRSVPs.length; i++) {
-        if(myEvent.confirmedRSVPs[i] == attendee){
-            rsvpConfirm = myEvent.confirmedRSVPs[i];
-        }
+        for (uint8 i = 0; i < myEvent.confirmedRSVPs.length; i++) {
+            if(myEvent.confirmedRSVPs[i] == attendee){
+                rsvpConfirm = myEvent.confirmedRSVPs[i];
     }
+}
 
     require(rsvpConfirm == attendee, "NO RSVP TO CONFIRM");
 
@@ -143,22 +157,13 @@ emit NewRSVP(eventId, msg.sender);
     }
 
     require(sent, "Failed to send Ether");
+
+
+        emit ConfirmedAttendee(eventId, attendee);
+    
 }
 
-function confirmAllAttendees(bytes32 eventId) external {
-    // look up event from our struct with the eventId
-    CreateEvent memory myEvent = idToEvent[eventId];
-
-    // make sure you require that msg.sender is the owner of the event
-    require(msg.sender == myEvent.eventOwner, "NOT AUTHORIZED");
-
-    // confirm each attendee in the rsvp array
-    for (uint8 i = 0; i < myEvent.confirmedRSVPs.length; i++) {
-        confirmAttendee(eventId, myEvent.confirmedRSVPs[i]);
-        
-        emit ConfirmedAttendee(eventId, attendee);
-
-        function withdrawUnclaimedDeposits(bytes32 eventId) external {
+function withdrawUnclaimedDeposits(bytes32 eventId) public {
     // look up event
     CreateEvent memory myEvent = idToEvent[eventId];
 
@@ -191,11 +196,9 @@ function confirmAllAttendees(bytes32 eventId) external {
     }
 
     require(sent, "Failed to send Ether");
-    emit DepositsPaidOut(eventId);
+
+  emit DepositsPaidOut(eventId);
 
 }
-    }
-}
-   
 }
 
